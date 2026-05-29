@@ -391,7 +391,11 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         return
 
     # ── ГРУППА: создание заказа ───────────────────────────────────────────────
-    if re.search(r'пациент', text, re.IGNORECASE) and re.search(r'доктор', text, re.IGNORECASE):
+    # Проверяем оба формата: полный и короткий (ЛТЛ-Новиков-23.07.2026)
+    is_full_format = re.search(r'пациент', text, re.IGNORECASE) and re.search(r'доктор', text, re.IGNORECASE)
+    is_short_format = re.match(r'^[А-ЯЁа-яёA-Za-z.\s]+-[А-ЯЁа-яёA-Za-z.\s]+-\d{2}\.\d{2}\.\d{4}', text.strip())
+
+    if is_full_format or is_short_format:
         order_data = parse_order(text)
         if not order_data:
             await msg.reply_text("❌ Формат:\n<code>Пациент: Иванов | Доктор: Смирнова | Дата: 10.07.2026</code>", parse_mode="HTML")
