@@ -68,6 +68,20 @@ async def api_update_order(order_id, data):
 def parse_order(text):
     text = text.strip()
     result = {}
+
+    # ── Короткий формат: ЛТЛ-Новиков-23.07.2026 или ЛТЛ-Новиков-23.07.2026-Комментарий ──
+    short = re.match(r'^([А-ЯЁа-яёA-Za-z.\s]+?)-([А-ЯЁа-яёA-Za-z.\s]+?)-(\d{2}\.\d{2}\.\d{4})(?:-(.+))?$', text.strip())
+    if short:
+        try:
+            d = datetime.strptime(short.group(3).strip(), "%d.%m.%Y")
+            result['doctor']   = short.group(1).strip()
+            result['patient']  = short.group(2).strip()
+            result['due_date'] = d.strftime("%Y-%m-%d")
+            result['comment']  = short.group(4).strip() if short.group(4) else ""
+            return result
+        except: pass
+
+    # ── Полный формат: Пациент: ... | Доктор: ... | Дата: ... ──
     m = re.search(r'пациент[:\s]+([^|,\n]+)', text, re.IGNORECASE)
     if m: result['patient'] = m.group(1).strip()
     m = re.search(r'доктор[:\s]+([^|,\n]+)', text, re.IGNORECASE)
