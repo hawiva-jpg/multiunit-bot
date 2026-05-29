@@ -207,24 +207,111 @@ async def cmd_removedoctor(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await api("DELETE", f"/api/bot/tg-doctors/{found}", None)
     await update.message.reply_text(f"✅ Доктор «{found}» удалён из системы.")
 
-async def cmd_adddoctor(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    if not ctx.args:
-        await update.message.reply_text("Укажите фамилию и chat_id: /adddoctor Иванов 123456789\n\nЧтобы узнать chat_id доктора — попросите его написать @userinfobot")
+async def cmd_myorder(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    """Доктор сам создаёт заказ: /мойзаказ Новиков-23.07.2026\nУгловой 17°, зуб 16, Nobel, 4мм"""
+    msg = update.message
+    chat = update.effective_chat
+
+    if chat.type != "private":
+        await msg.reply_text("Эта команда работает только в личке с ботом.")
         return
-    if len(ctx.args) < 2:
-        await update.message.reply_text(
-            "Укажите фамилию и chat_id:\n/adddoctor Иванов 123456789\n\n"
-            "Проще попросить доктора написать /start боту в личку — он зарегистрируется сам!"
+
+    # Определяем фамилию доктора по chat_id
+    doctors = await get_doctors()
+    doctor_name = next((name for name, cid in doctors.items() if cid == msg.chat_id), None)
+
+    if not doctor_name:
+        await msg.reply_text(
+            "❌ Вы не зарегистрированы в системе.\n\n"
+            "Напишите /start и введите свою фамилию."
         )
         return
-    surname = ctx.args[0]
-    try:
-        chat_id = int(ctx.args[1])
-    except:
-        await update.message.reply_text("❌ chat_id должен быть числом.")
+
+    # Парсим аргументы: первая строка — пациент и дата, остальные — мультиюниты
+    full_text = " ".join(ctx.args) if ctx.args else ""
+    # Если аргументов нет — показываем инструкцию
+    if not full_text:
+        await msg.reply_text(
+            f"📋 <b>Создать заказ самостоятельно</b>\n\n"
+            f"Используйте формат:\n"
+            f"<code>/мойзаказ Новиков-23.07.2026\nУгловой 17°, зуб 16, Nobel, 4мм\nПрямой 0°, зуб 14, Nobel, 2мм</code>\n\n"
+            f"Или короче:\n"
+            f"<code>/мойзаказ Новиков-23.07.2026\n1 мульт прямой 2мм, 17 градусов 3мм</code>\n\n"
+            f"Первая строка: <b>Пациент-Дата</b>\n"
+            f"Следующие строки: мультиюниты",
+            parse_mode="HTML"
+        )
         return
-    await save_doctor(surname, chat_id)
-    await update.message.reply_text(f"✅ Доктор «{surname}» добавлен!")
+
+    # Восстанавливаем текст со всеми строками
+    raw = msg.text.replace("/мойзаказ", "").replace("/myorder", "").strip()
+    lines = [l.strip() for l in raw.split('\n') if l.strip()]
+
+    if not lines:
+        await msg.reply_text("❌ Укажите хотя бы пациента и дату.")
+        return
+
+    # Первая строка — пациент и дата
+    first_line = lines[0]
+    m = re.match(r'^([А-ЯЁа-яёA-Za-z.\s]+?)-(\d{2}\.\d{2}\.\d{4})$', first_line.strip())
+    if not m:
+        await msg.reply_text(
+            "❌ Неверный формат первой строки.\n\n"
+            "Нужно: <code>Новиков-23.07.2026</code>",
+            parse_mode="HTML"
+        )
+        return
+
+    patient = m.group(1).strip()
+    try:
+        due_date = datetime.strptime(m.group(2), "%d.%m.%Y").strftime("%Y-%m-%d")
+    except:
+        await msg.reply_text("❌ Неверный формат даты. Нужно: ДД.ММ.ГГГГ")
+        return
+
+    # Остальные строки — мультиюниты
+    units = []
+    if len(lines) > 1:
+        units = parse_units("\n".join(lines[1:]))
+
+    order_data = {
+        'doctor': doctor_name,
+        'patient': patient,
+        'due_date': due_date,
+        'status': 'progress' if units else 'new',
+        'comment': '',
+        'units': units
+    }
+
+    order = await api_create_order(order_data)
+    if not order or 'id' not in order:
+        await msg.reply_text("❌ Ошибка при создании заказа.")
+        return
+
+    order_id = order['id']
+
+    units_text = "\n".join(
+        f"• {u['type']}"
+        + (f" · {u['length']}" if u['length'] else "")
+        + (f" · зуб #{u['tooth']}" if u['tooth'] else "")
+        + (f" · {u['system']}" if u['system'] else "")
+        + f" ×{u['qty']}"
+        for u in units
+    ) if units else "не указаны"
+
+    await msg.reply_text(
+        f"✅ <b>Заказ #{order_id} создан!</b>\n\n"
+        f"👤 Пациент: <b>{patient}</b>\n"
+        f"🩺 Доктор: <b>{doctor_name}</b>\n"
+        f"📅 Дата: <b>{due_date}</b>\n"
+        f"🔧 Статус: {'В работе' if units else 'Новый'}\n\n"
+        f"<b>Мультиюниты ({len(units)}):</b>\n{units_text}",
+        parse_mode="HTML"
+    )
+
+    # Уведомляем группу
+    # Найдём группу из последних pending или отправим без группы
+    logging.info(f"Doctor {doctor_name} created order #{order_id} independently")
 
 # ── Обработка сообщений ───────────────────────────────────────────────────────
 async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
@@ -371,6 +458,22 @@ async def handle_message(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
             return
         await send_result(msg, order, units, order_id)
 
+async def cmd_adddoctor(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
+    if not ctx.args:
+        await update.message.reply_text("Укажите фамилию и chat_id: /adddoctor Иванов 123456789")
+        return
+    if len(ctx.args) < 2:
+        await update.message.reply_text("Проще попросить доктора написать /start боту в личку!")
+        return
+    surname = ctx.args[0]
+    try:
+        chat_id = int(ctx.args[1])
+    except:
+        await update.message.reply_text("❌ chat_id должен быть числом.")
+        return
+    await save_doctor(surname, chat_id)
+    await update.message.reply_text(f"✅ Доктор «{surname}» добавлен!")
+
 def main():
     app = Application.builder().token(TOKEN).build()
     app.add_handler(CommandHandler("start", cmd_start))
@@ -378,6 +481,7 @@ def main():
     app.add_handler(CommandHandler("mydoctors", cmd_mydoctors))
     app.add_handler(CommandHandler("removedoctor", cmd_removedoctor))
     app.add_handler(CommandHandler("adddoctor", cmd_adddoctor))
+    app.add_handler(CommandHandler(["мойзаказ", "myorder"], cmd_myorder))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     print("✅ Бот запущен.")
     app.run_polling()
