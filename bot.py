@@ -208,7 +208,7 @@ async def cmd_removedoctor(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
     await update.message.reply_text(f"✅ Доктор «{found}» удалён из системы.")
 
 async def cmd_myorder(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
-    """Доктор сам создаёт заказ: /мойзаказ Новиков-23.07.2026\nУгловой 17°, зуб 16, Nobel, 4мм"""
+    """Доктор сам создаёт заказ: /myorder Новиков-23.07.2026\nУгловой 17°, зуб 16, Nobel, 4мм"""
     msg = update.message
     chat = update.effective_chat
 
@@ -234,9 +234,9 @@ async def cmd_myorder(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         await msg.reply_text(
             f"📋 <b>Создать заказ самостоятельно</b>\n\n"
             f"Используйте формат:\n"
-            f"<code>/мойзаказ Новиков-23.07.2026\nУгловой 17°, зуб 16, Nobel, 4мм\nПрямой 0°, зуб 14, Nobel, 2мм</code>\n\n"
+            f"<code>/myorder Новиков-23.07.2026\nУгловой 17°, зуб 16, Nobel, 4мм\nПрямой 0°, зуб 14, Nobel, 2мм</code>\n\n"
             f"Или короче:\n"
-            f"<code>/мойзаказ Новиков-23.07.2026\n1 мульт прямой 2мм, 17 градусов 3мм</code>\n\n"
+            f"<code>/myorder Новиков-23.07.2026\n1 мульт прямой 2мм, 17 градусов 3мм</code>\n\n"
             f"Первая строка: <b>Пациент-Дата</b>\n"
             f"Следующие строки: мультиюниты",
             parse_mode="HTML"
@@ -244,7 +244,7 @@ async def cmd_myorder(update: Update, ctx: ContextTypes.DEFAULT_TYPE):
         return
 
     # Восстанавливаем текст со всеми строками
-    raw = msg.text.replace("/мойзаказ", "").replace("/myorder", "").strip()
+    raw = msg.text.replace("/myorder", "").replace("/myorder", "").strip()
     lines = [l.strip() for l in raw.split('\n') if l.strip()]
 
     if not lines:
@@ -481,7 +481,7 @@ def main():
     app.add_handler(CommandHandler("mydoctors", cmd_mydoctors))
     app.add_handler(CommandHandler("removedoctor", cmd_removedoctor))
     app.add_handler(CommandHandler("adddoctor", cmd_adddoctor))
-    app.add_handler(CommandHandler(["мойзаказ", "myorder"], cmd_myorder))
+    app.add_handler(CommandHandler("myorder", cmd_myorder))
     app.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, handle_message))
     print("✅ Бот запущен.")
     app.run_polling()
